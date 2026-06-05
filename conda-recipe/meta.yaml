@@ -1,0 +1,43 @@
+package:
+  name: q2-mag
+  version: {{ PLUGIN_VERSION }}
+source:
+  path: ..
+build:
+  script: make install
+requirements:
+  host:
+  - python {{ python }}
+  - setuptools
+  - versioningit
+  - wheel
+  run:
+  - altair
+  - beautifulsoup4
+  - busco {{ busco }}
+  - diamond
+  - metabat2
+  - pandas
+  - pyhmmer
+  - qiime2 >={{ qiime2 }}
+  - q2-types >={{ q2_types }}
+  - q2templates >={{ q2templates }}
+  - q2-assembly >={{ q2_assembly }}
+  - semibin {{ semibin }}
+  build:
+  - python {{ python }}
+  - setuptools
+  - versioningit
+test:
+  requires:
+  - parameterized
+  - pytest-xdist
+  imports:
+  - q2_mag
+  - qiime2.plugins.mag
+  commands:
+  - pytest --pyargs q2_mag -n 4
+about:
+  home: https://github.com/bokulich-lab/q2-mag
+  license: BSD-3-Clause
+  license_family: BSD
