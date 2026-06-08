@@ -12,10 +12,7 @@ requirements:
   - versioningit
   - wheel
   run:
-  - altair
-  - beautifulsoup4
   - busco {{ busco }}
-  - diamond
   - metabat2
   - pandas
   - pyhmmer
@@ -23,6 +20,9 @@ requirements:
   - q2-types >={{ q2_types }}
   - q2templates >={{ q2templates }}
   - q2-assembly >={{ q2_assembly }}
+  - samtools
+  - scipy
+  - scikit-bio
   - semibin {{ semibin }}
   build:
   - python {{ python }}
