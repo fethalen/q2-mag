@@ -74,7 +74,6 @@ class TestUtils(TestPluginBase):
             }
         )
 
-
     def test_construct_param_simple(self):
         obs = _construct_param("test")
         exp = "--test"

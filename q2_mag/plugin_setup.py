@@ -44,8 +44,6 @@ from qiime2.core.type import (
     Visualization,
     Properties,
     TypeMap,
-    TypeMatch,
-    Threads,
 )
 from qiime2.plugin import Plugin, Citations
 import q2_mag

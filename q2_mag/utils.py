@@ -7,18 +7,13 @@
 # ----------------------------------------------------------------------------
 import os
 import subprocess
-import hashlib
-import warnings
 from typing import List, Union
 
 import pandas as pd
 import skbio
-import biom
-import numpy as np
 from q2_types.feature_data import DNASequencesDirectoryFormat
 
 from q2_types.feature_data_mag import MAGSequencesDirFmt
-from q2_types.feature_table import FeatureTable, PresenceAbsence, RelativeFrequency
 from q2_types.per_sample_sequences import MultiMAGSequencesDirFmt, ContigSequencesDirFmt
 
 EXTERNAL_CMD_WARNING = (

@@ -8,7 +8,6 @@
 # ----------------------------------------------------------------------------
 from . import metabat2, busco, filtering, utils, abundance, dereplication
 
-
 try:
     from ._version import __version__
 except ModuleNotFoundError:
