@@ -5,7 +5,6 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
-import biom
 import pandas as pd
 from q2_types.feature_data import DNASequencesDirectoryFormat
 from q2_types.per_sample_sequences import ContigSequencesDirFmt, MultiMAGSequencesDirFmt
@@ -39,11 +38,7 @@ def fake_processing_func_no_falsy_filtering(key, val):
 
 
 class TestUtils(TestPluginBase):
-    package = "q2_annotate.tests"
-
-    @staticmethod
-    def _df_to_biom(df):
-        return biom.Table(df.values.T, sample_ids=df.index, observation_ids=df.columns)
+    package = "q2_mag.tests"
 
     def setUp(self):
         super().setUp()
@@ -79,7 +74,6 @@ class TestUtils(TestPluginBase):
             }
         )
 
-        self.multiply = self.plugin.pipelines["multiply_tables"]
 
     def test_construct_param_simple(self):
         obs = _construct_param("test")

@@ -1,5 +1,5 @@
 [run]
-source=q2_annotate
+source=q2_mag
 branch = True
 omit =
     **/test_*.py
