@@ -22,7 +22,7 @@ requirements:
   - q2-assembly >={{ q2_assembly }}
   - samtools {{ samtools }}
   - scipy {{ scipy }}
-  - scikit-bio {{ scikit-bio }}
+  - scikit-bio {{ scikit_bio }}
   - semibin {{ semibin }}
   build:
   - python {{ python }}
