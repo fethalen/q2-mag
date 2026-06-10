@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2024, A QIIME 2 Plugin Developer.
+# Copyright (c) 2026, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -60,8 +60,8 @@ plugin = Plugin(
     version=__version__,
     website="https://github.com",
     package="q2_mag",
-    description="Rachis plugin for contig binning and bin quality assessment.",
-    short_description="Rachis plugin for contig binning and bin quality assessment.",
+    description="Rachis plugin for contig binning, bin quality assessment and MAG dereplication.",
+    short_description="Rachis plugin for contig binning, bin quality assessment and MAG dereplication.",
     citations=[],
 )
 
@@ -70,7 +70,7 @@ importlib.import_module("q2_mag.metabat2")
 partition_params = {"num_partitions": Int % Range(1, None)}
 partition_param_descriptions = {
     "num_partitions": (
-        "The number of partitions to split the contigs "
+        "The number of partitions to split the data "
         "into. Defaults to partitioning into individual "
         "samples."
     )

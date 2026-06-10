@@ -3,7 +3,7 @@ name = "q2-mag"
 authors = [
     { name = "Michal Ziemski", email = "ziemski.michal@gmail.com" }
 ]
-description = "Rachis plugin for contig binning and bin quality control."
+description = "Rachis plugin for contig binning, bin quality control and MAG dereplication."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = {file = "LICENSE"}
 dynamic = ["version"]
