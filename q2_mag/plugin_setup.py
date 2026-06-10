@@ -60,8 +60,14 @@ plugin = Plugin(
     version=__version__,
     website="https://github.com",
     package="q2_mag",
-    description="Rachis plugin for contig binning, bin quality assessment and MAG dereplication.",
-    short_description="Rachis plugin for contig binning, bin quality assessment and MAG dereplication.",
+    description=(
+        "Rachis plugin for contig binning, bin quality assessment "
+        "and MAG dereplication."
+    ),
+    short_description=(
+        "Rachis plugin for contig binning, bin quality assessment "
+        "and MAG dereplication."
+    ),
     citations=[],
 )
 
