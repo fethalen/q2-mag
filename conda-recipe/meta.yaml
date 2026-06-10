@@ -13,16 +13,16 @@ requirements:
   - wheel
   run:
   - busco {{ busco }}
-  - metabat2
-  - pandas
+  - metabat2 {{ metabat2 }}
+  - pandas {{ pandas }}
   - pyhmmer
   - qiime2 >={{ qiime2 }}
   - q2-types >={{ q2_types }}
   - q2templates >={{ q2templates }}
   - q2-assembly >={{ q2_assembly }}
-  - samtools
-  - scipy
-  - scikit-bio
+  - samtools {{ samtools }}
+  - scipy {{ scipy }}
+  - scikit-bio {{ scikit-bio }}
   - semibin {{ semibin }}
   build:
   - python {{ python }}
