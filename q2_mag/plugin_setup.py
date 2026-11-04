@@ -15,6 +15,8 @@ from q2_mag.busco.types import (
     BuscoDatabaseDirFmt,
     BUSCOResults,
     BUSCO,
+    OrthologDNASequences,
+    OrthologProteinSequences,
 )
 from q2_types.distance_matrix import DistanceMatrix
 from q2_types.feature_data import (
@@ -51,7 +53,9 @@ import q2_mag
 from q2_types.feature_data_mag import MAG, Contig
 from q2_types.per_sample_sequences import AlignmentMap
 from q2_types.reference_db import ReferenceDB
-from q2_types.genome_data import GenomeData, Proteins
+from q2_types.genome_data import (
+    GenomeData, Proteins, GenesDirectoryFormat, ProteinsDirectoryFormat,
+)
 
 from q2_mag import __version__
 from q2_mag.semibin2._examples import bin_contigs_semibin2_example
@@ -272,13 +276,16 @@ busco_params = {
     "metaeuk_rerun_parameters": Str,
     "miniprot": Bool,
     "additional_metrics": Bool,
+    "duplicate_mode": Str % Choices(["skip", "longest", "best_score"]),
+    "fragment_mode": Str % Choices(["skip", "longest", "best_score"]),
+    "case_mode": Str % Choices(["lower", "upper", "preserve"]),
 }
 busco_param_descriptions = {
     "mode": (
         "Specify which BUSCO analysis mode to run."
         "Currently only the 'genome' option is supported, "
         "for genome assemblies. In the future modes for transcriptome "
-        "assemblies and for magd gene sets (proteins) will be made "
+        "assemblies and for annotated gene sets (proteins) will be made "
         "available."
     ),
     "lineage_dataset": (
@@ -324,8 +331,19 @@ busco_param_descriptions = {
         "report. Check here for documentation: https://github.com/"
         "metashot/busco?tab=readme-ov-file#documetation"
     ),
+    "duplicate_mode": (
+        "How to handle duplicated USCOs. Options: 'longest' (keep longest sequence), "
+        "'best_score' (keep best-scoring sequence), or 'skip' (discard all duplicates)."
+    ),
+    "fragment_mode": (
+        "How to handle fragmented USCOs. Options: 'longest' (keep longest sequence), "
+        "'best_score' (keep best-scoring sequence), or 'skip' (discard all fragments)."
+    ),
+    "case_mode": (
+        "Casing of output sequences. Options: 'lower' (lowercase) or 'upper' "
+        "(uppercase), or 'preserve' (retain original casing)."
+    ),
 }
-
 
 plugin.methods.register_function(
     function=q2_mag.busco.collate_busco_results,
@@ -334,6 +352,30 @@ plugin.methods.register_function(
     outputs={"collated_results": BUSCOResults},
     name="Collate BUSCO results.",
     description="Collates BUSCO results.",
+)
+
+plugin.methods.register_function(
+    function=q2_mag.busco.collate_busco_sequences,
+    inputs={
+        "dna_sequences": List[OrthologDNASequences],
+        "protein_sequences": List[OrthologProteinSequences],
+    },
+    parameters={},
+    outputs=[
+        ("merged_dna_seqs", OrthologDNASequences),
+        ("merged_protein_seqs", OrthologProteinSequences),
+    ],
+    input_descriptions={
+        "dna_sequences": "A list of nucleotide USCO sequences per MAG.",
+        "protein_sequences": "A list of protein USCO sequences per MAG",
+    },
+    parameter_descriptions={},
+    output_descriptions={
+        "merged_dna_seqs": "A set of nucleotide USCO sequences.",
+        "merged_protein_seqs": "A set of protein USCO sequences.",
+    },
+    name="Collate multiple pairs of USCO directories into one.",
+    description="Collate multiple pairs of USCO directories into one.",
 )
 
 plugin.visualizers.register_function(
@@ -361,18 +403,27 @@ plugin.methods.register_function(
         "db": ReferenceDB[BUSCO],
     },
     parameters=busco_params,
-    outputs={"results": BUSCOResults},
+    outputs=[
+        ("results", BUSCOResults),
+        ("orthologs_nucleotide", OrthologDNASequences),
+        ("orthologs_protein", OrthologProteinSequences),
+    ],
     input_descriptions={
         "mags": "MAGs to be analyzed.",
         "db": "BUSCO database.",
         "unbinned_contigs": "Contigs which were not assigned to any bin.",
     },
     parameter_descriptions=busco_param_descriptions,
-    output_descriptions={"results": "BUSCO result table."},
-    name="Evaluate quality of the generated MAGs using BUSCO.",
+    output_descriptions={
+        "results": "BUSCO result table.",
+        "orthologs_nucleotide": "A set of nucleotide USCO sequences in FASTA format.",
+        "orthologs_protein": "A set of protein USCO sequences in FASTA format.",
+    },
+    name="Assess the quality of the MAGs and extract orthologs using BUSCO.",
     description=(
-        "This method uses BUSCO to assess the quality of assembled MAGs "
-        "and generates a table summarizing the results."
+        "This method uses BUSCO to assess the quality of assembled MAGs."
+        "It generates a table summarizing the results together with the nucleotide and "
+        "protein sequences single-copy orthologs found."
     ),
     citations=[citations["manni_busco_2021"]],
 )
@@ -385,7 +436,12 @@ plugin.pipelines.register_function(
         "db": ReferenceDB[BUSCO],
     },
     parameters={**busco_params, **partition_params},
-    outputs={"results": BUSCOResults, "visualization": Visualization},
+    outputs={
+        "results": BUSCOResults,
+        "visualization": Visualization,
+        "orthologs_nucleotide": OrthologDNASequences,
+        "orthologs_protein": OrthologProteinSequences,
+    },
     input_descriptions={
         "mags": "MAGs to be analyzed.",
         "db": "BUSCO database.",
@@ -395,11 +451,14 @@ plugin.pipelines.register_function(
     output_descriptions={
         "results": "BUSCO result table.",
         "visualization": "Visualization of the BUSCO results.",
+        "orthologs_nucleotide": "A set of nucleotide USCO sequences in FASTA format.",
+        "orthologs_protein": "A set of protein USCO sequences in FASTA format.",
     },
-    name="Evaluate quality of the generated MAGs using BUSCO.",
+    name="Assess MAG quality and extract single-copy orthologs using BUSCO.",
     description=(
-        "This method uses BUSCO to assess the quality of assembled "
-        "MAGs and generates a table summarizing the results."
+        "This method uses BUSCO to assess the quality of assembled MAGs."
+        "It generates a table summarizing the results together with the nucleotide and "
+        "protein sequences single-copy orthologs found."
     ),
     citations=[citations["manni_busco_2021"]],
 )
@@ -819,7 +878,9 @@ plugin.pipelines.register_function(
     examples={"bin_contigs_semibin2": bin_contigs_semibin2_example},
 )
 
-plugin.register_semantic_types(BUSCOResults, BUSCO)
+plugin.register_semantic_types(
+    BUSCOResults, BUSCO, OrthologDNASequences, OrthologProteinSequences
+)
 plugin.register_formats(
     BUSCOResultsFormat, BUSCOResultsDirectoryFormat, BuscoDatabaseDirFmt
 )
@@ -828,3 +889,11 @@ plugin.register_semantic_type_to_format(
 )
 plugin.register_semantic_type_to_format(ReferenceDB[BUSCO], BuscoDatabaseDirFmt)
 importlib.import_module("q2_mag.busco.types._transformer")
+
+plugin.register_semantic_type_to_format(
+    semantic_type=OrthologDNASequences, directory_format=GenesDirectoryFormat
+)
+
+plugin.register_semantic_type_to_format(
+    semantic_type=OrthologProteinSequences, directory_format=ProteinsDirectoryFormat
+)
