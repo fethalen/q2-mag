@@ -5,6 +5,8 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
+from q2_mag.busco.extract_orthologs import CaseMode, DuplicateMode, FragmentMode
+from q2_types.genome_data import GenesDirectoryFormat, ProteinsDirectoryFormat
 import json
 
 import qiime2
@@ -65,11 +67,14 @@ class TestBUSCOSampleData(TestPluginBase):
             cwd="cwd",
         )
 
+    @patch("q2_mag.busco.busco._extract_uscos")
     @patch("q2_mag.busco.busco._extract_json_data")
     @patch("q2_mag.busco.busco._process_busco_results")
     @patch("q2_mag.busco.busco._run_busco")
     @patch("q2_mag.busco.busco.glob.glob")
-    def test_busco_helper(self, mock_glob, mock_run, mock_process, mock_extract):
+    def test_busco_helper(
+        self, mock_glob, mock_run, mock_process, mock_extract, mock_extract_uscos
+    ):
         with open(
             self.get_data_path("busco_results_json/busco_results.json"), "r"
         ) as f:
@@ -77,12 +82,21 @@ class TestBUSCOSampleData(TestPluginBase):
 
         mock_process.side_effect = busco_list
 
-        obs = _busco_helper(self.mags, ["--lineage_dataset", "bacteria_odb10"], True)
+        obs_results, obs_usco_nucl_dir, obs_usco_prot_dir = _busco_helper(
+            self.mags,
+            {"lineage_dataset": "bacteria_odb10"},
+            True,
+            DuplicateMode.SKIP,
+            FragmentMode.SKIP,
+            CaseMode.UPPER,
+        )
         exp = pd.read_csv(
             self.get_data_path("busco_results/results_all/busco_results.tsv"), sep="\t"
         )
 
-        pd.testing.assert_frame_equal(obs, exp)
+        pd.testing.assert_frame_equal(obs_results, exp)
+        self.assertIsInstance(obs_usco_nucl_dir, GenesDirectoryFormat)
+        self.assertIsInstance(obs_usco_prot_dir, ProteinsDirectoryFormat)
 
         mock_run.assert_has_calls(
             [
@@ -101,21 +115,52 @@ class TestBUSCOSampleData(TestPluginBase):
             ]
         )
 
-        mag_ids = [
-            "24dee6fe-9b84-45bb-8145-de7b092533a1",
-            "ca7012fc-ba65-40c3-84f5-05aa478a7585",
-            "fb0bc871-04f6-486b-a10e-8e0cb66f8de3",
-            "d65a71fa-4279-4588-b937-0747ed5d604d",
-            "db03f8b6-28e1-48c5-a47c-9c65f38f7357",
-            "fa4d7420-d0a4-455a-b4d7-4fa66e54c9bf",
-        ]
-        samples = ["sample1", "sample1", "sample1", "sample2", "sample2", "sample2"]
-
-        expected_calls = [
-            call(ANY, sample, mag_id, f"{mag_id}.fasta", True)
-            for sample, mag_id in zip(samples, mag_ids)
-        ]
-        mock_process.assert_has_calls(expected_calls)
+        mock_process.assert_has_calls(
+            [
+                call(
+                    ANY,
+                    "sample1",
+                    "24dee6fe-9b84-45bb-8145-de7b092533a1",
+                    "24dee6fe-9b84-45bb-8145-de7b092533a1.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "sample1",
+                    "ca7012fc-ba65-40c3-84f5-05aa478a7585",
+                    "ca7012fc-ba65-40c3-84f5-05aa478a7585.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "sample1",
+                    "fb0bc871-04f6-486b-a10e-8e0cb66f8de3",
+                    "fb0bc871-04f6-486b-a10e-8e0cb66f8de3.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "sample2",
+                    "d65a71fa-4279-4588-b937-0747ed5d604d",
+                    "d65a71fa-4279-4588-b937-0747ed5d604d.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "sample2",
+                    "db03f8b6-28e1-48c5-a47c-9c65f38f7357",
+                    "db03f8b6-28e1-48c5-a47c-9c65f38f7357.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "sample2",
+                    "fa4d7420-d0a4-455a-b4d7-4fa66e54c9bf",
+                    "fa4d7420-d0a4-455a-b4d7-4fa66e54c9bf.fasta",
+                    True,
+                ),
+            ]
+        )
 
     @patch("q2_mag.busco.busco._busco_helper")
     def test_evaluate_busco_offline(self, mock_helper):
@@ -128,24 +173,27 @@ class TestBUSCOSampleData(TestPluginBase):
         )
         mock_helper.assert_called_with(
             self.mags,
-            [
-                "--mode",
-                "some_mode",
-                "--lineage_dataset",
-                "lineage_1",
-                "--cpu",
-                "1",
-                "--contig_break",
-                "10",
-                "--evalue",
-                "0.001",
-                "--limit",
-                "3",
-                "--offline",
-                "--download_path",
-                str(self.busco_db),
-            ],
+            {
+                "mode": "some_mode",
+                "lineage_dataset": "lineage_1",
+                "augustus": False,
+                "augustus_parameters": None,
+                "augustus_species": None,
+                "cpu": 1,
+                "contig_break": 10,
+                "evalue": 0.001,
+                "limit": 3,
+                "long": False,
+                "metaeuk_parameters": None,
+                "metaeuk_rerun_parameters": None,
+                "miniprot": False,
+                "offline": True,
+                "download_path": str(self.busco_db),
+            },
             False,
+            ANY,
+            ANY,
+            ANY,
         )
 
     @patch("q2_mag.busco.busco._get_feature_table", return_value="table1")
@@ -231,7 +279,7 @@ class TestBUSCOSampleData(TestPluginBase):
 
         # Create mock actions
         partition_action_mock = MagicMock(return_value=(fake_partition,))
-        evaluate_busco_mock = MagicMock(return_value=(0,))
+        evaluate_busco_mock = MagicMock(return_value=(0, "nucl", "prot"))
         collate_mock = MagicMock(return_value=("collated_result",))
         visualize_mock = MagicMock(return_value=("visualization",))
 
@@ -242,6 +290,8 @@ class TestBUSCOSampleData(TestPluginBase):
                 return evaluate_busco_mock
             elif action == "collate_busco_results":
                 return collate_mock
+            elif action == "collate_busco_sequences":
+                return MagicMock(return_value=("nucl", "prot"))
             elif action == "_visualize_busco":
                 return visualize_mock
 
@@ -255,8 +305,20 @@ class TestBUSCOSampleData(TestPluginBase):
             unbinned_contigs=unbinned,
             num_partitions=2,
             lineage_dataset="bacteria_odb10",
+            duplicate_mode="longest",
+            fragment_mode="best_score",
+            case_mode="lower",
         )
-        exp = ("collated_result", "visualization")
+        evaluate_busco_mock.assert_called_with(
+            "partition2", busco_db, mode="genome",
+            lineage_dataset="bacteria_odb10", augustus=False,
+            augustus_parameters=None, augustus_species=None, cpu=1,
+            contig_break=10, evalue=0.001, limit=3, long=False,
+            metaeuk_parameters=None, metaeuk_rerun_parameters=None,
+            miniprot=False, additional_metrics=True, duplicate_mode="longest",
+            fragment_mode="best_score", case_mode="lower",
+        )
+        exp = ("collated_result", "visualization", "nucl", "prot")
 
         self.assertTupleEqual(obs, exp)
 
@@ -273,7 +335,7 @@ class TestBUSCOSampleData(TestPluginBase):
 
         # Create mock actions
         partition_action_mock = MagicMock(return_value=(fake_partition,))
-        evaluate_busco_mock = MagicMock(return_value=(0,))
+        evaluate_busco_mock = MagicMock(return_value=(0, "nucl", "prot"))
         collate_mock = MagicMock(return_value=("collated_result",))
         visualize_mock = MagicMock(return_value=("visualization",))
 
@@ -284,6 +346,8 @@ class TestBUSCOSampleData(TestPluginBase):
                 return evaluate_busco_mock
             elif action == "collate_busco_results":
                 return collate_mock
+            elif action == "collate_busco_sequences":
+                return MagicMock(return_value=("nucl", "prot"))
             elif action == "_visualize_busco":
                 return visualize_mock
 
@@ -297,7 +361,19 @@ class TestBUSCOSampleData(TestPluginBase):
             unbinned_contigs=None,
             num_partitions=2,
             lineage_dataset="bacteria_odb10",
+            duplicate_mode="longest",
+            fragment_mode="best_score",
+            case_mode="lower",
         )
-        exp = ("collated_result", "visualization")
+        evaluate_busco_mock.assert_called_with(
+            "partition2", busco_db, mode="genome",
+            lineage_dataset="bacteria_odb10", augustus=False,
+            augustus_parameters=None, augustus_species=None, cpu=1,
+            contig_break=10, evalue=0.001, limit=3, long=False,
+            metaeuk_parameters=None, metaeuk_rerun_parameters=None,
+            miniprot=False, additional_metrics=True, duplicate_mode="longest",
+            fragment_mode="best_score", case_mode="lower",
+        )
+        exp = ("collated_result", "visualization", "nucl", "prot")
 
         self.assertTupleEqual(obs, exp)

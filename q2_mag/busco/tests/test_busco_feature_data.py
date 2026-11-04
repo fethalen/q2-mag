@@ -5,6 +5,8 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
+from q2_mag.busco.extract_orthologs import CaseMode, DuplicateMode, FragmentMode
+from q2_types.genome_data import GenesDirectoryFormat, ProteinsDirectoryFormat
 import json
 from unittest.mock import patch, ANY, MagicMock, call
 
@@ -27,11 +29,14 @@ class TestBUSCOFeatureData(TestPluginBase):
             mode="r",
         )
 
+    @patch("q2_mag.busco.busco._extract_uscos")
     @patch("q2_mag.busco.busco._extract_json_data")
     @patch("q2_mag.busco.busco._process_busco_results")
     @patch("q2_mag.busco.busco._run_busco")
     @patch("q2_mag.busco.busco.glob.glob")
-    def test_busco_helper(self, mock_glob, mock_run, mock_process, mock_extract):
+    def test_busco_helper(
+        self, mock_glob, mock_run, mock_process, mock_extract, mock_extract_uscos
+    ):
         with open(
             self.get_data_path("busco_results_json/busco_results_feature_data.json"),
             "r",
@@ -40,7 +45,14 @@ class TestBUSCOFeatureData(TestPluginBase):
 
         mock_process.side_effect = busco_list
 
-        obs = _busco_helper(self.mags, ["--lineage_dataset", "bacteria_odb10"], True)
+        obs_results, obs_usco_nucl_dir, obs_usco_prot_dir = _busco_helper(
+            self.mags,
+            {"lineage_dataset": "bacteria_odb10"},
+            True,
+            DuplicateMode.SKIP,
+            FragmentMode.SKIP,
+            CaseMode.UPPER,
+        )
 
         exp = pd.read_csv(
             self.get_data_path(
@@ -50,7 +62,9 @@ class TestBUSCOFeatureData(TestPluginBase):
             keep_default_na=False,
         )
         exp["sample_id"] = exp["sample_id"].astype(object)
-        pd.testing.assert_frame_equal(obs, exp)
+        pd.testing.assert_frame_equal(obs_results, exp)
+        self.assertIsInstance(obs_usco_nucl_dir, GenesDirectoryFormat)
+        self.assertIsInstance(obs_usco_prot_dir, ProteinsDirectoryFormat)
 
         mock_run.assert_called_once_with(
             input_dir=ANY,
@@ -58,16 +72,31 @@ class TestBUSCOFeatureData(TestPluginBase):
             sample_id="feature_data",
             params=["--lineage_dataset", "bacteria_odb10"],
         )
-        mag_ids = [
-            "24dee6fe-9b84-45bb-8145-de7b092533a1",
-            "ca7012fc-ba65-40c3-84f5-05aa478a7585",
-            "fb0bc871-04f6-486b-a10e-8e0cb66f8de3",
-        ]
-        expected_calls = [
-            call(ANY, "feature_data", mag_id, f"{mag_id}.fasta", True)
-            for mag_id in mag_ids
-        ]
-        mock_process.assert_has_calls(expected_calls)
+        mock_process.assert_has_calls(
+            [
+                call(
+                    ANY,
+                    "feature_data",
+                    "24dee6fe-9b84-45bb-8145-de7b092533a1",
+                    "24dee6fe-9b84-45bb-8145-de7b092533a1.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "feature_data",
+                    "ca7012fc-ba65-40c3-84f5-05aa478a7585",
+                    "ca7012fc-ba65-40c3-84f5-05aa478a7585.fasta",
+                    True,
+                ),
+                call(
+                    ANY,
+                    "feature_data",
+                    "fb0bc871-04f6-486b-a10e-8e0cb66f8de3",
+                    "fb0bc871-04f6-486b-a10e-8e0cb66f8de3.fasta",
+                    True,
+                ),
+            ]
+        )
 
     @patch("q2_mag.busco.busco._get_feature_table", return_value="table1")
     @patch("q2_mag.busco.busco._calculate_summary_stats", return_value="stats1")
@@ -151,7 +180,7 @@ class TestBUSCOFeatureData(TestPluginBase):
 
         # Create mock actions
         partition_action_mock = MagicMock(return_value=(fake_partition,))
-        evaluate_busco_mock = MagicMock(return_value=(0,))
+        evaluate_busco_mock = MagicMock(return_value=(0, "nucl", "prot"))
         collate_mock = MagicMock(return_value=("collated_result",))
         visualize_mock = MagicMock(return_value=("visualization",))
 
@@ -162,6 +191,8 @@ class TestBUSCOFeatureData(TestPluginBase):
                 return evaluate_busco_mock
             elif action == "collate_busco_results":
                 return collate_mock
+            elif action == "collate_busco_sequences":
+                return MagicMock(return_value=("nucl", "prot"))
             elif action == "_visualize_busco":
                 return visualize_mock
 
@@ -175,8 +206,20 @@ class TestBUSCOFeatureData(TestPluginBase):
             db=busco_db,
             num_partitions=2,
             lineage_dataset="bacteria_odb10",
+            duplicate_mode="longest",
+            fragment_mode="best_score",
+            case_mode="lower",
         )
-        exp = ("collated_result", "visualization")
+        evaluate_busco_mock.assert_called_with(
+            "partition2", busco_db, mode="genome",
+            lineage_dataset="bacteria_odb10", augustus=False,
+            augustus_parameters=None, augustus_species=None, cpu=1,
+            contig_break=10, evalue=0.001, limit=3, long=False,
+            metaeuk_parameters=None, metaeuk_rerun_parameters=None,
+            miniprot=False, additional_metrics=True, duplicate_mode="longest",
+            fragment_mode="best_score", case_mode="lower",
+        )
+        exp = ("collated_result", "visualization", "nucl", "prot")
         self.assertTupleEqual(obs, exp)
 
     def test_evaluate_busco_action_with_unbinned(self):
@@ -195,7 +238,7 @@ class TestBUSCOFeatureData(TestPluginBase):
 
         # Create mock actions
         partition_action_mock = MagicMock(return_value=(fake_partition,))
-        evaluate_busco_mock = MagicMock(return_value=(0,))
+        evaluate_busco_mock = MagicMock(return_value=(0, "nucl", "prot"))
         collate_mock = MagicMock(return_value=("collated_result",))
         visualize_mock = MagicMock(return_value=("visualization",))
 
@@ -206,6 +249,8 @@ class TestBUSCOFeatureData(TestPluginBase):
                 return evaluate_busco_mock
             elif action == "collate_busco_results":
                 return collate_mock
+            elif action == "collate_busco_sequences":
+                return MagicMock(return_value=("nucl", "prot"))
             elif action == "_visualize_busco":
                 return visualize_mock
 
@@ -221,5 +266,5 @@ class TestBUSCOFeatureData(TestPluginBase):
                 num_partitions=2,
                 lineage_dataset="bacteria_odb10",
             )
-        exp = ("collated_result", "visualization")
+        exp = ("collated_result", "visualization", "nucl", "prot")
         self.assertTupleEqual(obs, exp)

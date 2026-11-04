@@ -16,6 +16,16 @@ from typing import List, Union
 
 import pandas as pd
 import q2templates
+from q2_types.genome_data import GenesDirectoryFormat, ProteinsDirectoryFormat
+from q2_mag.busco.extract_orthologs import (
+    CaseMode,
+    DuplicateMode,
+    FragmentMode,
+    SequenceType,
+    _append_uscos,
+    _extract_uscos,
+    _get_busco_results_dir,
+)
 
 from q2_mag.busco.utils import (
     _parse_busco_params,
@@ -169,7 +179,14 @@ def _run_busco(input_dir: str, output_dir: str, sample_id: str, params: List[str
     run_command(cmd, cwd=os.path.dirname(output_dir))
 
 
-def _busco_helper(mags, common_args, additional_metrics):
+def _busco_helper(
+    mags,
+    kwargs,
+    additional_metrics,
+    duplicate_mode,
+    fragment_mode,
+    case_mode,
+):
     results_all = []
     # Get samples directories from MAGs
     if isinstance(mags, MultiMAGSequencesDirFmt):
@@ -177,7 +194,14 @@ def _busco_helper(mags, common_args, additional_metrics):
     elif isinstance(mags, MAGSequencesDirFmt):
         sample_dir = {"feature_data": mags.feature_dict()}
 
+    # Filter out all kwargs that are None, False or 0.0
+    common_args = _process_common_input_params(
+        processing_func=_parse_busco_params, params=kwargs
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
+        usco_nucl_dir, usco_prot_dir = GenesDirectoryFormat(), ProteinsDirectoryFormat()
+
         for sample_id, feature_dict in sample_dir.items():
 
             _run_busco(
@@ -188,9 +212,9 @@ def _busco_helper(mags, common_args, additional_metrics):
                 sample_id=sample_id,
                 params=common_args,
             )
-            # Extract and process results from JSON files for one sample
-            for mag_id, mag_fp in feature_dict.items():
 
+            for mag_id, mag_fp in feature_dict.items():
+                # Extract and process results from JSON files
                 json_path = glob.glob(
                     os.path.join(
                         str(tmp), sample_id, os.path.basename(mag_fp), "*.json"
@@ -206,7 +230,36 @@ def _busco_helper(mags, common_args, additional_metrics):
                 )
                 results_all.append(results)
 
-    return pd.DataFrame(results_all)
+                # Extract nucleotide and protein orthologs
+                busco_results_dir = _get_busco_results_dir(tmp, sample_id, mag_fp)
+                usco_fps_nucl, usco_fps_prot = (
+                    _extract_uscos(
+                        busco_results_dir=busco_results_dir,
+                        lineage_dataset=kwargs["lineage_dataset"],
+                        seq_type=seq_type,
+                        min_len=0,
+                        min_score=0,
+                        fragment_mode=fragment_mode,
+                        duplicate_mode=duplicate_mode,
+                    )
+                    for seq_type in (SequenceType.NUCLEOTIDE, SequenceType.PROTEIN)
+                )
+
+                usco_nucl_dir, usco_prot_dir = (
+                    _append_uscos(
+                        usco_dir,
+                        usco_fps,
+                        seq_type,
+                        species_tag=mag_id,
+                        case_mode=case_mode,
+                    )
+                    for usco_dir, usco_fps, seq_type in [
+                        (usco_nucl_dir, usco_fps_nucl, SequenceType.NUCLEOTIDE),
+                        (usco_prot_dir, usco_fps_prot, SequenceType.PROTEIN),
+                    ]
+                )
+
+    return pd.DataFrame(results_all), usco_nucl_dir, usco_prot_dir
 
 
 def _evaluate_busco(
@@ -227,11 +280,17 @@ def _evaluate_busco(
     metaeuk_rerun_parameters: str = None,
     miniprot: bool = False,
     additional_metrics: bool = False,
-) -> pd.DataFrame:
+    duplicate_mode: DuplicateMode = DuplicateMode.SKIP,
+    fragment_mode: FragmentMode = FragmentMode.SKIP,
+    case_mode: CaseMode = CaseMode.UPPER,
+) -> tuple[pd.DataFrame, GenesDirectoryFormat, ProteinsDirectoryFormat]:
     kwargs = {
         k: v
         for k, v in locals().items()
-        if k not in ["mags", "db", "additional_metrics", "unbinned_contigs"]
+        if k not in [
+            "mags", "db", "additional_metrics", "unbinned_contigs",
+            "duplicate_mode", "fragment_mode", "case_mode",
+        ]
     }
     kwargs["offline"] = True
     kwargs["download_path"] = str(db)
@@ -242,13 +301,9 @@ def _evaluate_busco(
             db,
         )
 
-    common_args = _process_common_input_params(
-        processing_func=_parse_busco_params, params=kwargs
+    return _busco_helper(
+        mags, kwargs, additional_metrics, duplicate_mode, fragment_mode, case_mode
     )
-
-    busco_results = _busco_helper(mags, common_args, additional_metrics)
-
-    return busco_results
 
 
 def _visualize_busco(
@@ -385,6 +440,9 @@ def evaluate_busco(
     miniprot=False,
     additional_metrics=True,
     num_partitions=None,
+    duplicate_mode=DuplicateMode.SKIP,
+    fragment_mode=FragmentMode.SKIP,
+    case_mode=CaseMode.UPPER,
 ):
     if not lineage_dataset:
         raise ValueError("'lineage-dataset' is required as a parameter")
@@ -412,15 +470,24 @@ def evaluate_busco(
 
     (partitioned_mags,) = partition_mags(mags, num_partitions)
     results = []
+    all_nucl_seqs = []
+    all_prot_seqs = []
+
+    collate_busco_sequences = ctx.get_action("mag", "collate_busco_sequences")
 
     # Run BUSCO evaluation on all partitions without unbinned contigs
     for mag_partition in partitioned_mags.values():
-        (busco_result,) = _evaluate_busco(mag_partition, db, **kwargs)
+        busco_result, nucl_seqs, prot_seqs = _evaluate_busco(
+            mag_partition, db, **kwargs
+        )
         results.append(busco_result)
+        all_nucl_seqs.append(nucl_seqs)
+        all_prot_seqs.append(prot_seqs)
 
     (collated_results,) = collate_busco_results(results)
 
     # Pass unbinned_contigs to visualization step
     (visualization,) = _visualize_busco(collated_results, unbinned_contigs)
 
-    return collated_results, visualization
+    nucl_seqs, prot_seqs = collate_busco_sequences(all_nucl_seqs, all_prot_seqs)
+    return collated_results, visualization, nucl_seqs, prot_seqs

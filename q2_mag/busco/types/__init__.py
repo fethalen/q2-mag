@@ -5,12 +5,19 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # ----------------------------------------------------------------------------
-from ._type import BUSCOResults, BUSCO
+from ._type import (
+    BUSCOResults,
+    BUSCO,
+    OrthologDNASequences,
+    OrthologProteinSequences,
+)
+
 from ._format import (
     BUSCOResultsFormat,
     BUSCOResultsDirectoryFormat,
     BuscoDatabaseDirFmt,
 )
+
 
 __all__ = [
     "BUSCOResults",
@@ -18,4 +25,6 @@ __all__ = [
     "BUSCOResultsDirectoryFormat",
     "BUSCO",
     "BuscoDatabaseDirFmt",
+    "OrthologDNASequences",
+    "OrthologProteinSequences",
 ]
